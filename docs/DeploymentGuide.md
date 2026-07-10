@@ -251,7 +251,7 @@ Customize your deployment by setting `azd` environment variables before running 
 | **Fabric Workspace** | `FABRIC_WORKSPACE_NAME` | Override the default Fabric workspace name | `Microsoft IQ - {suffix}` | `azd env set FABRIC_WORKSPACE_NAME "My Workspace"` |
 | | `FABRIC_WORKSPACE_ADMINISTRATORS` | Comma-separated additional workspace admins (UPNs and/or object IDs) | _(empty)_ | `azd env set FABRIC_WORKSPACE_ADMINISTRATORS "user@contoso.com,11111111-2222-3333-4444-555555555555"` |
 | **Microsoft Foundry** | `AZURE_AI_DEPLOYMENTS_LOCATION` | AI deployment region (**required**) | _(prompted)_ | `azd env set AZURE_AI_DEPLOYMENTS_LOCATION eastus` |
-| | `AZURE_OPENAI_DEPLOYMENT_MODEL` | GPT model to deploy | `gpt-4.1-mini` | `azd env set AZURE_OPENAI_DEPLOYMENT_MODEL gpt-4o` |
+| | `AZURE_OPENAI_DEPLOYMENT_MODEL` | GPT model to deploy | `gpt-5-mini` | `azd env set AZURE_OPENAI_DEPLOYMENT_MODEL gpt-4o` |
 | | `AZURE_OPENAI_MODEL_VERSION` | GPT model version | `2025-04-14` | `azd env set AZURE_OPENAI_MODEL_VERSION 2025-04-14` |
 | | `AZURE_OPENAI_DEPLOYMENT_MODEL_CAPACITY` | GPT capacity (tokens/min in thousands) | `150` | `azd env set AZURE_OPENAI_DEPLOYMENT_MODEL_CAPACITY 200` |
 | | `AZURE_OPENAI_MODEL_DEPLOYMENT_TYPE` | GPT deployment type | `GlobalStandard` | `azd env set AZURE_OPENAI_MODEL_DEPLOYMENT_TYPE Standard` |
@@ -293,7 +293,7 @@ The deployment creates two integrated components in a single Azure Resource Grou
 - **[Azure AI Search](https://learn.microsoft.com/azure/search/search-what-is-azure-search)**: Document indexing with [vector search](https://learn.microsoft.com/azure/search/vector-search-overview) and [knowledge base](https://learn.microsoft.com/en-us/azure/search/agentic-retrieval-how-to-create-knowledge-base?tabs=rbac%2C2025-11-01-preview&pivots=csharp)
 - **[Azure Storage Account](https://learn.microsoft.com/azure/storage/common/storage-account-overview)**: [Blob storage](https://learn.microsoft.com/azure/storage/blobs/storage-blobs-overview) for documents with direct citations
 - **[Azure OpenAI Models](https://learn.microsoft.com/azure/ai-services/openai/)**:
-  - [`gpt-4.1-mini`](https://learn.microsoft.com/azure/ai-services/openai/concepts/models) - Chat completion (150K TPM)
+  - [`gpt-5-mini`](https://learn.microsoft.com/azure/ai-services/openai/concepts/models) - Chat completion (150K TPM)
   - [`text-embedding-3-small`](https://learn.microsoft.com/azure/ai-services/openai/concepts/models#embeddings) - Vector embeddings (80K TPM)
 - **[Chat Agent](https://learn.microsoft.com/azure/ai-studio/how-to/develop/create-agent)**: Knowledge Base-powered agent for document Q&A
 
@@ -327,7 +327,7 @@ After successful deployment, you will have a single Azure Resource Group contain
 | **Fabric Capacity** (`{solution_suffix}-fabric-capacity` or your existing capacity) | Compute backing the Fabric workspace. Resumed automatically if paused. |
 | **User-assigned Managed Identity** | Identity used by deployment scripts and Foundry connections to call Azure AI Search and Storage without secrets. |
 | **Microsoft Foundry Hub & Project** | Container for AI agents, model deployments, knowledge bases, and connections. |
-| **Azure OpenAI deployments** | Two model deployments inside the Foundry project: a chat completion model (default `gpt-4.1-mini`) and an embedding model (default `text-embedding-3-small`). |
+| **Azure OpenAI deployments** | Two model deployments inside the Foundry project: a chat completion model (default `gpt-5-mini`) and an embedding model (default `text-embedding-3-small`). |
 | **Azure AI Search** | Vector + keyword search service. Backs the Foundry knowledge base; index name `{solution_suffix}-documents`. |
 | **Azure Storage Account** | Blob storage for source documents. Container `{solution_suffix}-documents` is uploaded to by `setup_knowledge_base` and referenced by AI Search citations. |
 | **Log Analytics workspace + Application Insights** | Diagnostic and monitoring sink for the Foundry project, AI Search, and the chat agent. Reused if `AZURE_EXISTING_LOG_ANALYTICS_WORKSPACE_ID` is set. |
@@ -384,7 +384,7 @@ Sourced and named by [`install_microsoft_iq_solution.py`](../infra/scripts/insta
 Open [ai.azure.com](https://ai.azure.com) and sign in with the same account used for `azd auth login`. From the landing page, select your hub and then your project (the project name is stored as `AZURE_AI_PROJECT_NAME` in your `azd` environment; the endpoint is `AZURE_AI_AGENT_ENDPOINT`). Once inside the project, confirm:
 
 1. **Knowledge Bases** → `{solution_suffix}-kb` exists, status is *Ready*, and it lists `{solution_suffix}-ks` as its source.
-2. **Agents** → an agent named `ChatAgent` exists, its model matches `AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME` / `AZURE_CHAT_MODEL` (default `gpt-4.1-mini`), and the **Tools** panel shows the `{solution_suffix}-kb-mcp-connection` MCP tool attached.
+2. **Agents** → an agent named `ChatAgent` exists, its model matches `AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME` / `AZURE_CHAT_MODEL` (default `gpt-5-mini`), and the **Tools** panel shows the `{solution_suffix}-kb-mcp-connection` MCP tool attached.
 3. **Connections** → the AI Search, Blob Storage, and KB MCP connections are all *Connected*.
 
 > If `setup_agent` finished with a warning during deployment, this verification is the recommended way to check whether the agent was actually created. If `ChatAgent` is missing, simply re-run `azd up`.

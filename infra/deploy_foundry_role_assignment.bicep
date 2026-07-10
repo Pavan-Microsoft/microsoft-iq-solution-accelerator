@@ -78,6 +78,7 @@ resource aiServicesDeployments 'Microsoft.CognitiveServices/accounts/deployments
     model: {
       format: 'OpenAI'
       name: aiModeldeployment.model
+      version: aiModeldeployment.?version
     }
     raiPolicyName: aiModeldeployment.raiPolicyName
   }

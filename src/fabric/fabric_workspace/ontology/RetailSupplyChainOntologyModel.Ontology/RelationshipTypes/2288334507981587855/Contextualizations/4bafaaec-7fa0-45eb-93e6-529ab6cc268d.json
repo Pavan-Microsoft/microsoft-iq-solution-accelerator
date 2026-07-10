@@ -3,7 +3,7 @@
   "id": "4bafaaec-7fa0-45eb-93e6-529ab6cc268d",
   "dataBindingTable": {
     "workspaceId": "00000000-0000-0000-0000-000000000000",
-    "itemId": "1fae70c2-8925-9cd0-498f-50e8e6cd0b76",
+    "itemId": "PLACEHOLDER-LAKEHOUSE-ID",
     "sourceTableName": "demandforecast",
     "sourceSchema": "inventory",
     "sourceType": "LakehouseTable"

@@ -3,7 +3,7 @@
   "id": "587e8aa5-8d37-4b63-a190-ebd73da07232",
   "dataBindingTable": {
     "workspaceId": "00000000-0000-0000-0000-000000000000",
-    "itemId": "1fae70c2-8925-9cd0-498f-50e8e6cd0b76",
+    "itemId": "PLACEHOLDER-LAKEHOUSE-ID",
     "sourceTableName": "supplychaineventimpacts",
     "sourceSchema": "supplychain",
     "sourceType": "LakehouseTable"

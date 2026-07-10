@@ -33,16 +33,16 @@
       "value": "${AZURE_SEARCH_SERVICE_LOCATION=}"
     },
     "aiDeploymentsLocation": {
-      "value": "${AZURE_AI_DEPLOYMENTS_LOCATION=westus}"
+      "value": "${AZURE_AI_DEPLOYMENTS_LOCATION=}"
     },
     "deploymentType": {
       "value": "${AZURE_OPENAI_MODEL_DEPLOYMENT_TYPE=GlobalStandard}"
     },
     "gptModelName": {
-      "value": "${AZURE_OPENAI_DEPLOYMENT_MODEL=gpt-4.1-mini}"
+      "value": "${AZURE_OPENAI_DEPLOYMENT_MODEL=gpt-5-mini}"
     },
     "gptModelVersion": {
-      "value": "${AZURE_OPENAI_MODEL_VERSION=2025-04-14}"
+      "value": "${AZURE_OPENAI_MODEL_VERSION=2025-08-07}"
     },
     "gptDeploymentCapacity": {
       "value": "${AZURE_OPENAI_DEPLOYMENT_MODEL_CAPACITY=150}"

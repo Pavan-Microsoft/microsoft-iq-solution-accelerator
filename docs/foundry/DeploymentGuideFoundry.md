@@ -41,7 +41,7 @@ In addition to the [common requirements](../DeploymentGuide.md#deployment-enviro
 
 ### Model availability
 
-- **`gpt-4.1-mini`** (or your `AZURE_CHAT_MODEL` override) available in the target `AZURE_AI_DEPLOYMENTS_LOCATION` region.
+- **`gpt-5-mini`** (or your `AZURE_CHAT_MODEL` override) available in the target `AZURE_AI_DEPLOYMENTS_LOCATION` region.
 - **`text-embedding-3-small`** (or your `AZURE_OPENAI_EMBEDDING_MODEL` override) available in the same region.
 
 > Check model availability at [Azure OpenAI model summary](https://learn.microsoft.com/azure/ai-services/openai/concepts/models#model-summary-table-and-region-availability).
@@ -57,7 +57,7 @@ Phase 1 (Bicep) creates the following Foundry-related resources in a single reso
 | **[Azure AI Foundry Hub & Project](https://learn.microsoft.com/azure/ai-studio/concepts/ai-resources)** | Container for agents, model deployments, knowledge bases, and connections. |
 | **[Azure AI Search](https://learn.microsoft.com/azure/search/search-what-is-azure-search)** | Document indexing with vector + keyword hybrid search. |
 | **[Azure Storage Account](https://learn.microsoft.com/azure/storage/common/storage-account-overview)** | Blob storage for PDF documents with direct citation links. |
-| **Azure OpenAI deployments** | `gpt-4.1-mini` for chat (150K TPM) and `text-embedding-3-small` for embeddings (80K TPM). |
+| **Azure OpenAI deployments** | `gpt-5-mini` for chat (150K TPM) and `text-embedding-3-small` for embeddings (80K TPM). |
 | **User-assigned Managed Identity** | Secure authentication between Foundry, Search, and Storage — no secrets stored. |
 | **Log Analytics + Application Insights** | Diagnostics and monitoring for the Foundry project and AI Search. |
 | **Foundry connections** | Project connections wiring Foundry to AI Search, Blob Storage, and the Knowledge Base MCP endpoint. |
@@ -151,7 +151,7 @@ The `ChatAgent` is configured with:
 
 | Setting | Value |
 |---|---|
-| **Model** | `gpt-4.1-mini` (override with `AZURE_CHAT_MODEL` or `AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME`) |
+| **Model** | `gpt-5-mini` (override with `AZURE_CHAT_MODEL` or `AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME`) |
 | **Tool** | Knowledge Base MCP connection for document retrieval |
 | **Capabilities** | Document Q&A, semantic search, citation generation, chart creation |
 
@@ -177,7 +177,7 @@ Foundry-specific variables set via `azd env set <KEY> <VALUE>` before `azd up`:
 | Variable | Purpose | Default |
 |---|---|---|
 | `AZURE_AI_DEPLOYMENTS_LOCATION` | Region for AI model deployments (**required**) | _(prompted)_ |
-| `AZURE_CHAT_MODEL` | Chat completion model name | `gpt-4.1-mini` |
+| `AZURE_CHAT_MODEL` | Chat completion model name | `gpt-5-mini` |
 | `AZURE_OPENAI_EMBEDDING_MODEL` | Embedding model name | `text-embedding-3-small` |
 | `AZURE_AI_SEARCH_INDEX` | Search index name | `{solution_suffix}-documents` |
 | `KB_MCP_CONNECTION_NAME` | MCP connection name | `{solution_suffix}-kb-mcp-connection` |
@@ -223,7 +223,7 @@ This sends a sample question to the deployed agent and prints the response with 
 
 **Symptom**: Bicep deployment fails with a quota or capacity error for OpenAI model deployments.
 
-**Why**: The target region may not have sufficient quota for `gpt-4.1-mini` (150K TPM) or `text-embedding-3-small` (80K TPM).
+**Why**: The target region may not have sufficient quota for `gpt-5-mini` (150K TPM) or `text-embedding-3-small` (80K TPM).
 
 **Fix**: Either request a quota increase, or deploy to a different region:
 ```bash

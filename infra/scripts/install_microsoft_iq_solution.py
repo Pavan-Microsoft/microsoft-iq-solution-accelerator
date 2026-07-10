@@ -54,11 +54,11 @@ Environment Variables:
     AZURE_OPENAI_EMBEDDING_MODEL         (optional) Embedding model deployment name.
                                                     Defaults to text-embedding-3-small.
     AZURE_CHAT_MODEL                     (optional) Chat model deployment name.
-                                                    Defaults to gpt-4.1-mini.
+                                                    Defaults to gpt-5-mini.
     AZURE_AI_SEARCH_INDEX                (optional) Search index name.
                                                     Defaults to <SOLUTION_SUFFIX>-documents.
     AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME (optional) Chat model deployment name for the agent.
-                                                    Falls back to AZURE_CHAT_MODEL, then gpt-4.1-mini.
+                                                    Falls back to AZURE_CHAT_MODEL, then gpt-5-mini.
     KB_MCP_CONNECTION_NAME               (optional) Project connection name for the Knowledge Base MCP tool.
                                                     Defaults to <SOLUTION_SUFFIX>-kb-mcp-connection.
 """
@@ -159,7 +159,7 @@ def main() -> None:
         or agent_endpoint.split("/api/projects")[0]
     )
     embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-    chat_model = os.getenv("AZURE_CHAT_MODEL", "gpt-4.1-mini")
+    chat_model = os.getenv("AZURE_CHAT_MODEL", "gpt-5-mini")
     search_index_name = os.getenv("AZURE_AI_SEARCH_INDEX", f"{solution_suffix}-documents")
     blob_container_name = f"{solution_suffix}-documents"
     knowledge_base_name = f"{solution_suffix}-kb"
@@ -168,7 +168,7 @@ def main() -> None:
     # Agent model selection
     agent_model = (
         os.getenv("AZURE_CHAT_MODEL")
-        or os.getenv("AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini")
+        or os.getenv("AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
     )
     kb_mcp_connection_name = os.getenv("KB_MCP_CONNECTION_NAME", f"{solution_suffix}-kb-mcp-connection")
 

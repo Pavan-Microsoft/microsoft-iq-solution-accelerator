@@ -537,3 +537,4 @@ catch {
 }
 
 Write-Log "Script completed successfully"
+# Script ends here

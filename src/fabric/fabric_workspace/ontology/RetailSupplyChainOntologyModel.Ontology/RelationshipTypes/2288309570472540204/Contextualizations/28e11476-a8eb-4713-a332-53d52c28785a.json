@@ -3,7 +3,7 @@
   "id": "28e11476-a8eb-4713-a332-53d52c28785a",
   "dataBindingTable": {
     "workspaceId": "00000000-0000-0000-0000-000000000000",
-    "itemId": "1fae70c2-8925-9cd0-498f-50e8e6cd0b76",
+    "itemId": "PLACEHOLDER-LAKEHOUSE-ID",
     "sourceTableName": "productsuppliers",
     "sourceSchema": "supplychain",
     "sourceType": "LakehouseTable"

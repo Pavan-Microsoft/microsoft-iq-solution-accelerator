@@ -355,7 +355,7 @@ jobs:
           echo "- 🏗️ **Microsoft Fabric capacity** and user-assigned **managed identity**" >> $GITHUB_STEP_SUMMARY
           echo "- 🧠 **Microsoft Foundry hub & project** with AI Search and Storage connections" >> $GITHUB_STEP_SUMMARY
           echo "- 🔍 **Azure AI Search** service and **Azure Storage** account for document indexing" >> $GITHUB_STEP_SUMMARY
-          echo "- 🤖 **Azure OpenAI deployments**: \`gpt-4.1-mini\` (chat) and \`text-embedding-3-small\` (embeddings)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🤖 **Azure OpenAI deployments**: \`gpt-5-mini\` (chat) and \`text-embedding-3-small\` (embeddings)" >> $GITHUB_STEP_SUMMARY
           echo "- 📈 **Log Analytics workspace** and **Application Insights** for diagnostics" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Phase 2 — Solution bootstrap (\`install_microsoft_iq_solution.py\` postprovision hook)" >> $GITHUB_STEP_SUMMARY

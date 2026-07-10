@@ -22,7 +22,7 @@ Microsoft M365 Copilot users can choose one of the following generative AI model
 - Claude Sonnet 4.6
 - Claude Opus 4.6
 
-Foundry IQ component uses GPT-4.1-mini for chat and text-embedding-3-small for search. 
+Foundry IQ component uses GPT-5-mini for chat and text-embedding-3-small for search. 
 
 The Fabric IQ component uses built-in AI capabilities provided by the Fabric Platform, such as Copilot for Power BI and Fabric. The Fabric IQ component source code does not explicitly use generative AI. The source code consists of PySpark Notebooks. The source code also includes Python Programs that can be used to generate configurable sample data. 
 
