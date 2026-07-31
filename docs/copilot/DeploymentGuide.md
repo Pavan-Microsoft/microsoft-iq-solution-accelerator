@@ -74,7 +74,7 @@ After import, add the Fabric and Foundry agents again in Copilot Studio. Use Fab
 5. Select **Microsoft Foundry**.
 6. Authenticate with Microsoft Entra.
 7. Provide the Azure AI Foundry project endpoint configured during the Foundry deployment. The article uses the format `https://<project-resource>.services.ai.azure.com/api/projects/<project-name>`.
-8. Set the following
+8. Set the following:
    - **Name**: ChatAgent
    - **Description**: You are a data analyst assistant for Microsoft IQ with access to documents and reference materials.
    - **Agent Id**: ChatAgent
