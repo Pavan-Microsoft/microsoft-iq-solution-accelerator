@@ -79,7 +79,7 @@ After import, add the Fabric and Foundry agents again in Copilot Studio. Use Fab
    - **Description**: You are a data analyst assistant for Microsoft IQ with access to documents and reference materials.
    - **Agent Id**: ChatAgent
      - This is the same name as the agent in Foundry.
-10. Save the connection and confirm the Foundry agent appears in the connected-agent list.
+9. Save the connection and confirm the Foundry agent appears in the connected-agent list.
 
 ### 4.2 Add the Fabric Data Agent
  
@@ -124,7 +124,7 @@ The solution is now active and ready to test. See the [Testing Guide](./TestingG
 ## Troubleshooting
 
 - **The connector 'Azure AI Foundry Agent Service' returned an HTTP error with code 400. Inner Error: Agent ChatAgent endpoint does not support activity. Please update the agent endpoint to support this protocol.**
-  - This error means the Foundry Agent doesn't have the `ActivityProtocol` enabled. This can occur on new deployments of agents. You will need to [programmatically enable this setting](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/configure-agent?tabs=rest#enable-protocols-and-authorization-schemes) on your `ChatAgent`. You can do this via the Az CLI.
+  - This error means the Foundry Agent doesn't have the `ActivityProtocol` enabled. This can occur on new deployments of agents. You will need to [programmatically enable this setting](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/configure-agent?tabs=rest#enable-protocols-and-authorization-schemes) on your `ChatAgent`. You can do this via the Azure CLI.
     ```shell
     az rest \
     --method patch \
