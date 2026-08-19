@@ -76,7 +76,7 @@ After import, add the Fabric and Foundry agents again in Copilot Studio. Use Fab
 7. Provide the Azure AI Foundry project endpoint configured during the Foundry deployment. The article uses the format `https://<project-resource>.services.ai.azure.com/api/projects/<project-name>`.
 8. Set the following:
    - **Name**: `Foundry Chat Agent`
-     - **IMPORTANT**: You *must* name the agent exactly `Foundry Chat Agent` since this is the name that is referenced in the system prompt
+     - **IMPORTANT**: You *must* name the agent exactly `Foundry Chat Agent` since this is the name that is referenced in the system prompt.
    - **Description**: You are a data analyst assistant for Microsoft IQ with access to documents and reference materials.
    - **Agent Id**: ChatAgent
      - This is the same name as the agent in Foundry.
@@ -91,7 +91,7 @@ After import, add the Fabric and Foundry agents again in Copilot Studio. Use Fab
 5. Pick the published **Fabric Data Agent** named **RetailSC Ontology Agent** that belongs to this solution.
 6. Set the following:
    - **Name**: `Fabric Data Agent`
-     - **IMPORTANT**: You *must* name the agent exactly `Fabric Data Agent` since this is the name that is referenced in the system prompt
+     - **IMPORTANT**: You *must* name the agent exactly `Fabric Data Agent` since this is the name that is referenced in the system prompt.
 7. Save the connection and make sure the Fabric agent now shows up in the list of connected agents.
  
 ---
