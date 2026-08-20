@@ -3,6 +3,10 @@
 # Core dependencies for generating realistic sales, finance & supply chain data
 # Supports both sales/finance generators and supply chain generators
 
+# Microsoft Package Feed Proxy: routes pip installs through the CFS-protected proxy
+# instead of pypi.org directly (required on Microsoft-managed devices/networks).
+--index-url https://packagefeedproxy.microsoft.io/pypi/simple/
+
 # Essential for data generation and processing
 pandas>=2.0.0
 numpy>=1.24.0

@@ -1,5 +1,9 @@
 # Requirements for infra/scripts (Fabric + Foundry deployment)
 
+# Microsoft Package Feed Proxy: routes pip installs through the CFS-protected proxy
+# instead of pypi.org directly (required on Microsoft-managed devices/networks).
+--index-url https://packagefeedproxy.microsoft.io/pypi/simple/
+
 # Azure authentication
 azure-identity==1.23.0
 
