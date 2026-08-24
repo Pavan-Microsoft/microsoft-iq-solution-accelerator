@@ -66,6 +66,12 @@ env:
   # --- Azure region ---
   AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'eastus' }}
 
+  # --- Package feed proxy ---
+  # Routes pip installs through the Microsoft Package Feed Proxy so CI keeps working
+  # once direct access to pypi.org is blocked on Microsoft-managed devices/runners.
+  # Override via a repo/environment Variable if a different index is needed.
+  PIP_INDEX_URL: ${{ vars.PIP_INDEX_URL || 'https://packagefeedproxy.microsoft.io/pypi/simple/' }}
+
   # --- Common ---
   # ENABLE_TELEMETRY: ${{ vars.ENABLE_TELEMETRY }}
   DEPLOYING_USER_PRINCIPAL_TYPE: ${{ vars.DEPLOYING_USER_PRINCIPAL_TYPE || 'ServicePrincipal' }}

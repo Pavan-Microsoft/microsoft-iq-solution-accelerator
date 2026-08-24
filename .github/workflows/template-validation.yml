@@ -38,6 +38,7 @@ jobs:
           AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYING_USER_PRINCIPAL_TYPE: ServicePrincipal
+          PIP_INDEX_URL: ${{ vars.PIP_INDEX_URL || 'https://packagefeedproxy.microsoft.io/pypi/simple/' }}
 
       - name: Print result
         run: cat ${{ steps.validation.outputs.resultFile }}

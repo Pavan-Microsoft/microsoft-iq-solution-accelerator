@@ -52,6 +52,9 @@ A development container (or dev container for short) lets you use a container as
 
 > Note: The Fabric installer notebook ([`fabric_solution_installer.ipynb`](../infra/fabric/deploy/fabric_solution_installer.ipynb)) runs **inside the Fabric workspace**, not in this container. It manages its own dependencies via `%pip install`; the container's Python packages do not affect it.
 
+### Package Feed Proxy (Microsoft-Managed Devices)
+All `pip install` commands above route through the Microsoft Package Feed Proxy (`https://packagefeedproxy.microsoft.io/pypi/simple/`) by default, via the `PIP_INDEX_URL` environment variable set in [`devcontainer.json`](./devcontainer.json)'s `containerEnv` (with a host `PIP_INDEX_URL` taking precedence if already set). This keeps `pip install` working once direct access to `pypi.org` is blocked on Microsoft-managed devices. To use public PyPI instead (e.g. outside a Microsoft-managed network), set `PIP_INDEX_URL=https://pypi.org/simple/` on the host before the container starts.
+
 ## How to use this dev container
 
 This README is a **reference for the dev container itself** — what's installed, how it's configured, and how to customize it. For end-to-end deployment instructions (prerequisites, `azd up`, optional configuration variables, expected results, cleanup), see the single source of truth: [`docs/DeploymentGuide.md`](../docs/DeploymentGuide.md).
