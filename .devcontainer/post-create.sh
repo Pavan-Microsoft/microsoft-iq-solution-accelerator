@@ -7,6 +7,14 @@ set -e
 
 echo "🚀 Setting up Microsoft IQ Solution Accelerator development environment..."
 
+# Microsoft Package Feed Proxy (CFS) configuration.
+# All pip installs in this script route through the CFS-protected proxy instead of
+# pypi.org / files.pythonhosted.org directly. PIP_INDEX_URL is normally already set via
+# devcontainer.json's containerEnv, but is (re)exported here as a safety net for anyone
+# invoking this script outside of the devcontainer.
+export PIP_INDEX_URL="${PIP_INDEX_URL:-https://packagefeedproxy.microsoft.io/pypi/simple/}"
+echo "📦 Using pip index URL: $PIP_INDEX_URL"
+
 # Note: Core tools already provided by devcontainer.json:
 # - Python 3.x (base image) with pip and venv
 # - Azure CLI + Bicep (azure-cli feature)
@@ -31,7 +39,7 @@ python3 -m pip --version
 
 # Upgrade pip
 echo "🐍 Upgrading pip..."
-python3 -m pip install --upgrade pip
+python3 -m pip install --index-url "$PIP_INDEX_URL" --upgrade pip
 
 # Install Python requirements for the project
 echo "📋 Installing Python dependencies globally..."
@@ -40,7 +48,7 @@ echo "📋 Installing Python dependencies globally..."
 # This improves deployment script performance by avoiding repeated installations
 if [ -f "./requirements.txt" ]; then
     echo "📦 Installing main Fabric requirements globally..."
-    python3 -m pip install -r "./requirements.txt"
+    python3 -m pip install --index-url "$PIP_INDEX_URL" -r "./requirements.txt"
     echo "✅ Main Fabric requirements installed successfully"
 else
     echo "⚠️ Warning: ./requirements.txt not found"
@@ -49,7 +57,7 @@ fi
 # Install data generation requirements (optional)
 if [ -f "./src/fabric/datagen/requirements.txt" ]; then
     echo "📦 Installing data generation requirements..."
-    python3 -m pip install -r "./src/fabric/datagen/requirements.txt"
+    python3 -m pip install --index-url "$PIP_INDEX_URL" -r "./src/fabric/datagen/requirements.txt"
     echo "✅ Data generation requirements installed successfully"
 else
     echo "ℹ️ Info: ./src/fabric/datagen/requirements.txt not found (optional)"
@@ -58,7 +66,7 @@ fi
 # Install fabric-launcher if in multi-root workspace
 if [ -d "../fabric-launcher" ]; then
     echo "📦 Installing fabric-launcher in editable mode..."
-    python3 -m pip install -e "../fabric-launcher[dev]"
+    python3 -m pip install --index-url "$PIP_INDEX_URL" -e "../fabric-launcher[dev]"
     echo "✅ fabric-launcher installed successfully"
 else
     echo "ℹ️ Info: fabric-launcher not found in workspace (optional)"
@@ -66,7 +74,7 @@ fi
 
 # Install additional development tools
 echo "🛠️ Installing development tools..."
-if ! python3 -m pip install --user \
+if ! python3 -m pip install --index-url "$PIP_INDEX_URL" --user \
     black \
     flake8 \
     pytest \
