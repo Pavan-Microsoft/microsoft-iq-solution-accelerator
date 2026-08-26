@@ -1,0 +1,142 @@
+name: _infra
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Logical stage from the Bicep params folder; selects the params file."
+        required: true
+        type: string
+      gh_environment:
+        description: "GitHub Environment to bind for Variables + gate (for example <stage>-preview or <stage>)."
+        required: true
+        type: string
+      command:
+        description: "plan or apply"
+        required: true
+        type: string
+      template_file:
+        required: false
+        type: string
+        default: infra/main.bicep
+      parameters_file:
+        description: "Override; defaults to infra/params/<environment>.bicepparam"
+        required: false
+        type: string
+        default: ""
+    outputs:
+      deployment_name:
+        description: "Name of the az deployment created on apply (empty on plan). Consumed by a chained post-deploy workflow to read the deployment outputs."
+        value: ${{ jobs.infra.outputs.deployment_name }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.gh_environment }}
+    outputs:
+      deployment_name: ${{ steps.deploy.outputs.deployment_name }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve parameters file
+        id: params
+        env:
+          PARAMETERS_FILE: ${{ inputs.parameters_file }}
+          TEMPLATE_FILE: ${{ inputs.template_file }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          file="$PARAMETERS_FILE"
+          if [ -z "$file" ]; then
+            file="$(dirname "$TEMPLATE_FILE")/params/$ENVIRONMENT.bicepparam"
+          fi
+          if [ ! -f "$file" ]; then
+            echo "::error::Parameters file '$file' not found. This repo needs a per-environment parameters file for '$ENVIRONMENT' (see the skill's naming-conventions.md)."
+            exit 1
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve target resource group
+        id: target
+        env:
+          PARAMS_FILE: ${{ steps.params.outputs.file }}
+        run: |
+          bp="$(az bicep build-params --file "$PARAMS_FILE" --stdout)"
+          rg="$(echo "$bp" | jq -r '.parametersJson | fromjson | .parameters.resourceGroupName.value // ""')"
+          if [ -z "$rg" ] || [ "$rg" = "null" ]; then
+            echo "::error::Parameter 'resourceGroupName' not found in '$PARAMS_FILE'. Add it to the .bicepparam file so Bicep config drives the target resource group (see the skill's naming-conventions.md)."
+            exit 1
+          fi
+          loc="$(echo "$bp" | jq -r '.parametersJson | fromjson | .parameters.location.value // ""')"
+          echo "resource_group=$rg" >> "$GITHUB_OUTPUT"
+          echo "location=$loc" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure resource group exists
+        if: vars.CREATE_RESOURCE_GROUP != 'false'
+        env:
+          RESOURCE_GROUP: ${{ steps.target.outputs.resource_group }}
+          PARAM_LOCATION: ${{ steps.target.outputs.location }}
+          VAR_LOCATION: ${{ vars.AZURE_LOCATION }}
+        run: |
+          location="$PARAM_LOCATION"
+          if [ -z "$location" ]; then
+            location="$VAR_LOCATION"
+          fi
+          if [ -z "$location" ]; then
+            echo "::error::The resource group is created by default but no location is set. Add a 'location' parameter to the .bicepparam file, or define the AZURE_LOCATION Environment Variable (or set CREATE_RESOURCE_GROUP=false if the resource group already exists)."
+            exit 1
+          fi
+          echo "Ensuring resource group '$RESOURCE_GROUP' exists in '$location' (idempotent)..."
+          az group create --name "$RESOURCE_GROUP" --location "$location" --only-show-errors --output none
+
+      - name: What-if
+        if: inputs.command == 'plan'
+        env:
+          RESOURCE_GROUP: ${{ steps.target.outputs.resource_group }}
+          TEMPLATE_FILE: ${{ inputs.template_file }}
+          PARAMS_FILE: ${{ steps.params.outputs.file }}
+        run: |
+          az deployment group what-if \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file "$TEMPLATE_FILE" \
+            --parameters "$PARAMS_FILE" | tee plan.txt
+
+      - name: Publish what-if to check summary
+        if: inputs.command == 'plan' && always()
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          {
+            echo "### Infra what-if — \`$ENVIRONMENT\`"
+            echo ''
+            echo '```'
+            cat plan.txt 2>/dev/null || echo '(no plan output)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy
+        id: deploy
+        if: inputs.command == 'apply'
+        env:
+          RESOURCE_GROUP: ${{ steps.target.outputs.resource_group }}
+          TEMPLATE_FILE: ${{ inputs.template_file }}
+          PARAMS_FILE: ${{ steps.params.outputs.file }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          DEPLOYMENT_NAME="gh-$RUN_ID-$RUN_ATTEMPT"
+          az deployment group create \
+            --name "$DEPLOYMENT_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file "$TEMPLATE_FILE" \
+            --parameters "$PARAMS_FILE"
+          echo "deployment_name=$DEPLOYMENT_NAME" >> "$GITHUB_OUTPUT"

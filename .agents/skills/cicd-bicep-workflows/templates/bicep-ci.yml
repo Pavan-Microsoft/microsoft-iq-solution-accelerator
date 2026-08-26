@@ -1,0 +1,70 @@
+name: bicep-ci
+
+on:
+  pull_request:
+    branches: [__DEFAULT_BRANCH__]
+    paths:
+      - "__INFRA_DIR__/**"
+      - ".github/workflows/bicep-ci.yml"
+      - ".github/workflows/_infra.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Lint and build
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          found=0
+          for t in __INFRA_DIR__/**/*.bicep; do
+            found=1
+            echo "::group::lint $t";  az bicep lint  --file "$t";            echo "::endgroup::"
+            echo "::group::build $t"; az bicep build --file "$t" --stdout >/dev/null; echo "::endgroup::"
+          done
+          for p in __INFRA_DIR__/**/*.bicepparam; do
+            echo "::group::build-params $p"; az bicep build-params --file "$p" --stdout >/dev/null; echo "::endgroup::"
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No .bicep files found under __INFRA_DIR__/"; exit 1
+          fi
+
+      - name: Format check
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          rc=0
+          for t in __INFRA_DIR__/**/*.bicep __INFRA_DIR__/**/*.bicepparam; do
+            az bicep format --file "$t" --stdout > /tmp/formatted 2>/dev/null || continue
+            if ! diff -q "$t" /tmp/formatted >/dev/null; then
+              echo "::error file=$t::Not formatted. Run: az bicep format --file $t"
+              diff -u "$t" /tmp/formatted || true
+              rc=1
+            fi
+          done
+          exit $rc
+
+  plan:
+    needs: lint-build
+    permissions:
+      id-token: write
+      contents: read
+    # What-if for every environment. Each binds its ungated `<env>-preview` environment so a PR
+    # never waits on required reviewers; auth comes from that environment's own Variables.
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [__ENVIRONMENTS_INLINE__]
+    uses: ./.github/workflows/_infra.yml
+    with:
+      environment: ${{ matrix.environment }}
+      gh_environment: ${{ matrix.environment }}-preview
+      command: plan

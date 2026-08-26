@@ -1,0 +1,70 @@
+# Azure DevOps — Terraform CI (static validation)
+#
+# There is no remote state and no long-lived resource group, so a PR cannot run `terraform plan`
+# against real state. This pipeline performs fast, credential-free static checks: `terraform fmt`,
+# `terraform init -backend=false`, and `terraform validate`. The full create -> apply ->
+# post-deploy -> test -> cleanup cycle runs in the deploy pipeline (push to the default branch,
+# schedule, or manual), never on a
+# PR.
+#
+# Placeholders rendered by the skill:
+#   __DEFAULT_BRANCH__  e.g. main
+#   __INFRA_TF_DIR__    e.g. infra_tf
+#   __TF_VERSION__      e.g. 1.9.8
+
+trigger: none # CI runs on PRs only (see pr:)
+
+pr:
+  branches:
+    include:
+      - __DEFAULT_BRANCH__
+  paths:
+    include:
+      - __INFRA_TF_DIR__/**
+      - .azuredevops/pipelines/azure-pipelines-terraform-ci.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  INFRA_TF_DIR: __INFRA_TF_DIR__
+  TF_VERSION: __TF_VERSION__
+
+steps:
+  - checkout: self
+
+  - task: Bash@3
+    displayName: Install Terraform (if not preinstalled)
+    inputs:
+      targetType: inline
+      script: |
+        set -euo pipefail
+        if command -v terraform >/dev/null 2>&1; then
+          echo "terraform present: $(terraform version | head -n 1)"
+        else
+          echo "Installing Terraform $TF_VERSION..."
+          curl -fsSL -o /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+          unzip -o /tmp/tf.zip -d /tmp/tfbin >/dev/null
+          sudo mv /tmp/tfbin/terraform /usr/local/bin/terraform
+          terraform version
+        fi
+
+  - task: Bash@3
+    displayName: terraform fmt (check)
+    inputs:
+      targetType: inline
+      workingDirectory: $(INFRA_TF_DIR)
+      script: |
+        set -euo pipefail
+        terraform fmt -check -recursive -diff
+
+  - task: Bash@3
+    displayName: terraform validate
+    inputs:
+      targetType: inline
+      workingDirectory: $(INFRA_TF_DIR)
+      script: |
+        set -euo pipefail
+        # Init without a backend and without provider network calls, then validate the config.
+        terraform init -backend=false -input=false
+        terraform validate

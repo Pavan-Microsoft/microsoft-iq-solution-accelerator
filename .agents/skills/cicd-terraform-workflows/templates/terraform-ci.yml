@@ -1,0 +1,53 @@
+name: terraform-ci
+
+on:
+  pull_request:
+    branches: [__DEFAULT_BRANCH__]
+    paths:
+      - "__INFRA_TF_DIR__/**"
+      - ".github/workflows/terraform-ci.yml"
+      - ".github/workflows/_infra_tf.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: __INFRA_TF_DIR__
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "__TF_VERSION__"
+          terraform_wrapper: false
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        # -backend=false validates config + installs providers without touching remote state.
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  plan:
+    needs: lint
+    permissions:
+      id-token: write
+      contents: read
+    # Plan for every environment. Each binds its ungated `<env>-preview` environment so a PR never
+    # waits on required reviewers; auth + state-backend config come from that environment's Variables.
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [__ENVIRONMENTS_INLINE__]
+    uses: ./.github/workflows/_infra_tf.yml
+    with:
+      environment: ${{ matrix.environment }}
+      gh_environment: ${{ matrix.environment }}-preview
+      command: plan

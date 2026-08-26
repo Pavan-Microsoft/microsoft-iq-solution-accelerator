@@ -1,0 +1,281 @@
+name: _post-deploy
+
+# Reusable, solution-agnostic post-deploy engine. After the infrastructure is provisioned it
+# reconstructs the azd environment from the deployment outputs and runs the solution's own
+# post-deploy scripts (discovered by the cicd-post-deploy skill from azure.yaml hooks and/or the
+# deployment guide). It contains NO solution-specific knowledge: the ordered script list and any
+# runtime toggles are substituted at generation time via the __…__ placeholders. It never edits
+# the repo's Bicep/app/post-provision sources.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Logical stage from the infra params folder; selects the params file used to resolve the target resource group."
+        required: true
+        type: string
+      gh_environment:
+        description: "GitHub Environment to bind for Variables + gate (for example <stage>)."
+        required: true
+        type: string
+      azd_env_name:
+        description: "azd environment name to reconstruct on the runner. Defaults to the logical stage."
+        required: false
+        type: string
+        default: ""
+      deployment_name:
+        description: "Infra deployment name to read outputs from. When empty, the latest succeeded deployment in the resource group is used."
+        required: false
+        type: string
+        default: ""
+      template_file:
+        required: false
+        type: string
+        default: infra/main.bicep
+      parameters_file:
+        description: "Override; defaults to infra/params/<environment>.bicepparam"
+        required: false
+        type: string
+        default: ""
+      infra_flavor:
+        description: "bicep or terraform. Selects how the target resource group and infra outputs are resolved. Defaults to bicep so existing Bicep pipelines are unchanged."
+        required: false
+        type: string
+        default: bicep
+      working_directory:
+        description: "Terraform root (used only when infra_flavor == terraform)."
+        required: false
+        type: string
+        default: infra_tf
+      terraform_version:
+        description: "Terraform version (used only when infra_flavor == terraform)."
+        required: false
+        type: string
+        default: "__TF_VERSION__"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  post-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.gh_environment }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # --- Bicep flavor: resolve RG + deployment from the params file + ARM ------------------
+      - name: Resolve parameters file
+        id: params
+        if: inputs.infra_flavor != 'terraform'
+        env:
+          PARAMETERS_FILE: ${{ inputs.parameters_file }}
+          TEMPLATE_FILE: ${{ inputs.template_file }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          file="$PARAMETERS_FILE"
+          if [ -z "$file" ]; then
+            file="$(dirname "$TEMPLATE_FILE")/params/$ENVIRONMENT.bicepparam"
+          fi
+          if [ ! -f "$file" ]; then
+            echo "::error::Parameters file '$file' not found for environment '$ENVIRONMENT'."
+            exit 1
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve target resource group
+        id: target
+        if: inputs.infra_flavor != 'terraform'
+        env:
+          PARAMS_FILE: ${{ steps.params.outputs.file }}
+        run: |
+          rg="$(az bicep build-params --file "$PARAMS_FILE" --stdout \
+            | jq -r '.parametersJson | fromjson | .parameters.resourceGroupName.value // ""')"
+          if [ -z "$rg" ] || [ "$rg" = "null" ]; then
+            echo "::error::Parameter 'resourceGroupName' not found in '$PARAMS_FILE'."
+            exit 1
+          fi
+          echo "resource_group=$rg" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve deployment name
+        id: deployment
+        if: inputs.infra_flavor != 'terraform'
+        env:
+          RESOURCE_GROUP: ${{ steps.target.outputs.resource_group }}
+          DEPLOYMENT_NAME: ${{ inputs.deployment_name }}
+        run: |
+          name="$DEPLOYMENT_NAME"
+          if [ -z "$name" ]; then
+            name="$(az deployment group list \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "sort_by([?properties.provisioningState=='Succeeded'], &properties.timestamp)[-1].name" \
+              -o tsv)"
+          fi
+          if [ -z "$name" ] || [ "$name" = "None" ]; then
+            echo "::error::No succeeded deployment found in resource group '$RESOURCE_GROUP'. Provide 'deployment_name' or run the infra deploy first."
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Collect infra outputs (bicep)
+        id: outputs_bicep
+        if: inputs.infra_flavor != 'terraform'
+        env:
+          RESOURCE_GROUP: ${{ steps.target.outputs.resource_group }}
+          DEPLOYMENT_NAME: ${{ steps.deployment.outputs.name }}
+        run: |
+          az deployment group show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$DEPLOYMENT_NAME" \
+            --query properties.outputs -o json > infra-outputs.json
+          echo "resource_group=$RESOURCE_GROUP" >> "$GITHUB_OUTPUT"
+
+      # --- Terraform flavor: resolve RG + outputs from Terraform state ----------------------
+      - name: Set up Terraform
+        if: inputs.infra_flavor == 'terraform'
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform init (read-only against existing state)
+        if: inputs.infra_flavor == 'terraform'
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_USE_AZUREAD: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          BACKEND_RG: ${{ vars.TF_BACKEND_RESOURCE_GROUP }}
+          BACKEND_SA: ${{ vars.TF_BACKEND_STORAGE_ACCOUNT }}
+          BACKEND_CT: ${{ vars.TF_BACKEND_CONTAINER }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if grep -rqsE 'backend[[:space:]]+"azurerm"' --include='*.tf' .; then
+            echo "Existing azurerm backend block found in the Terraform sources; not writing backend.tf."
+          else
+            cat > backend.tf <<'EOF'
+          terraform {
+            backend "azurerm" {
+              use_oidc         = true
+              use_azuread_auth = true
+            }
+          }
+          EOF
+          fi
+          cat > "backend.$ENVIRONMENT.hcl" <<EOF
+          resource_group_name  = "$BACKEND_RG"
+          storage_account_name = "$BACKEND_SA"
+          container_name       = "$BACKEND_CT"
+          key                  = "$ENVIRONMENT.tfstate"
+          EOF
+          terraform init -input=false -backend-config="backend.$ENVIRONMENT.hcl"
+
+      - name: Collect infra outputs (terraform)
+        id: outputs_tf
+        if: inputs.infra_flavor == 'terraform'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          rg="$(terraform output -raw resource_group_name 2>/dev/null || true)"
+          if [ -z "$rg" ]; then
+            echo "::error::terraform output 'resource_group_name' was empty. Run the Terraform infra deploy first so state has outputs."
+            exit 1
+          fi
+          # Normalize `terraform output -json` ({name:{value:...}}) to the same
+          # {name:{value:...}} shape the bicep path produces, so hydration is identical.
+          terraform output -json > "$GITHUB_WORKSPACE/infra-outputs.json"
+          echo "resource_group=$rg" >> "$GITHUB_OUTPUT"
+
+      # --- Reconstruct the azd environment from the infra outputs ----------------------------
+      # The solution's post-deploy scripts read configuration the way azd would have written it
+      # (azd env get-value / a generated .env / plain environment variables). We reproduce that
+      # from the deployment outputs — no script edits, no solution-specific mapping.
+      - name: Install azd
+        run: |
+          curl -fsSL https://aka.ms/install-azd.sh | bash
+          azd version
+
+      - name: Hydrate azd environment from infra outputs
+        env:
+          AZD_ENV: ${{ inputs.azd_env_name != '' && inputs.azd_env_name || inputs.environment }}
+        run: |
+          export AZURE_SUBSCRIPTION_ID="${{ vars.AZURE_SUBSCRIPTION_ID }}"
+          export AZURE_LOCATION="${{ vars.AZURE_LOCATION }}"
+          azd env new "$AZD_ENV" --no-prompt \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            ${AZURE_LOCATION:+--location "$AZURE_LOCATION"} || azd env select "$AZD_ENV"
+
+          # Bridge every scalar output into (a) the azd env, (b) a repo-root .env, and
+          # (c) $GITHUB_ENV — covering scripts that read via any of those. ARM lowercases
+          # output keys, so upper-case them to the canonical UPPER_SNAKE names.
+          jq -r '
+            to_entries[]
+            | select((.value.value | type) as $t | $t=="string" or $t=="number" or $t=="boolean")
+            | "\(.key | ascii_upcase)\t\(.value.value | tostring)"
+          ' infra-outputs.json > kv.tsv
+
+          : > .env
+          while IFS=$'\t' read -r k v; do
+            [ -n "$k" ] || continue
+            azd env set "$k" "$v"
+            printf '%s=%s\n' "$k" "$v" >> .env
+            printf '%s=%s\n' "$k" "$v" >> "$GITHUB_ENV"
+          done < kv.tsv
+          echo "Hydrated $(wc -l < kv.tsv) output(s) into azd env '$AZD_ENV', .env and \$GITHUB_ENV."
+
+      # --- Runtime toolchains (pwsh ships on ubuntu-latest; python only when needed) ---------
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        if: ${{ __NEEDS_PYTHON__ }}
+        with:
+          python-version: "__PY_VERSION__"
+
+      - name: Install post-deploy Python dependencies
+        if: ${{ __NEEDS_PYTHON__ }}
+        run: |
+          python -m pip install uv
+          uv pip install --system -r __REQUIREMENTS__
+
+      # --- Run the solution's own post-deploy scripts, in discovered order -------------------
+      # The placeholder below is rendered by the skill as one `run_step <runner> <path> [args...]`
+      # line per confirmed script (runner is one of bash|pwsh|python), each indented to match.
+      # Scripts read configuration from the reconstructed azd env / .env / environment, so most
+      # steps need no arguments. Pass extra args only when a step needs a non-interactive
+      # selector/default (for example a mode/scenario flag), and pipe stdin
+      # (for example `printf '\n' | run_step ...`) for simple confirmation prompts.
+      - name: Run post-deploy steps
+        shell: bash
+        env:
+          AZURE_ENV_NAME: ${{ inputs.azd_env_name != '' && inputs.azd_env_name || inputs.environment }}
+        run: |
+          set -euo pipefail
+          run_step() {
+            runner="$1"; path="$2"; shift 2
+            if [ ! -f "$path" ]; then
+              echo "::error::post-deploy script '$path' not found."; exit 1
+            fi
+            echo "::group::$runner $path $*"
+            case "$runner" in
+              bash)   bash "$path" "$@" ;;
+              pwsh)   pwsh -File "$path" "$@" ;;
+              python) python "$path" "$@" ;;
+              *) echo "::error::unknown runner '$runner' for '$path'"; exit 1 ;;
+            esac
+            echo "::endgroup::"
+          }
+          __POST_DEPLOY_STEPS__
+
+      - name: Manual post-steps (reminder)
+        if: always()
+        run: |
+          {
+            echo "### Post-deploy — manual steps not run by CI"
+            echo ''
+            echo "__MANUAL_POST_STEPS__"
+          } >> "$GITHUB_STEP_SUMMARY"

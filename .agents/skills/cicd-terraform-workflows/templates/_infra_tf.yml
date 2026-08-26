@@ -1,0 +1,169 @@
+name: _infra_tf
+
+# Reusable Terraform engine: runs `terraform plan`/`apply` for one environment against the
+# repo's existing Terraform under __INFRA_TF_DIR__. Rendered by the cicd-terraform-workflows
+# skill. It never edits the repo's .tf sources — it only writes throwaway backend files
+# (backend.tf + backend.<env>.hcl, both git-ignored) at runtime so state lives in the
+# per-environment Azure Storage backend. Coexists with the Bicep pipeline; nothing is replaced.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Logical stage; selects the tfvars file and the state key."
+        required: true
+        type: string
+      gh_environment:
+        description: "GitHub Environment to bind for Variables + gate (for example <stage>-preview or <stage>)."
+        required: true
+        type: string
+      command:
+        description: "plan or apply"
+        required: true
+        type: string
+      working_directory:
+        required: false
+        type: string
+        default: __INFRA_TF_DIR__
+      var_file:
+        description: "Override; defaults to <environment>.tfvars inside working_directory."
+        required: false
+        type: string
+        default: ""
+      terraform_version:
+        required: false
+        type: string
+        default: "__TF_VERSION__"
+
+permissions:
+  id-token: write
+  contents: read
+
+# OIDC for both the azurerm provider AND the azurerm state backend (no client secret).
+env:
+  ARM_USE_OIDC: "true"
+  ARM_USE_AZUREAD: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.gh_environment }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve var-file
+        id: vars
+        env:
+          VAR_FILE: ${{ inputs.var_file }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          file="$VAR_FILE"
+          if [ -z "$file" ]; then
+            file="$ENVIRONMENT.tfvars"
+          fi
+          if [ ! -f "$file" ]; then
+            echo "::error::Terraform var-file '$file' not found in '${{ inputs.working_directory }}'. This repo needs a per-environment tfvars for '$ENVIRONMENT' (see the skill's naming-conventions.md)."
+            exit 1
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Write backend configuration
+        env:
+          BACKEND_RG: ${{ vars.TF_BACKEND_RESOURCE_GROUP }}
+          BACKEND_SA: ${{ vars.TF_BACKEND_STORAGE_ACCOUNT }}
+          BACKEND_CT: ${{ vars.TF_BACKEND_CONTAINER }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          # Fail early with an actionable message if the state backend Variables are missing.
+          missing=""
+          [ -n "$BACKEND_RG" ] || missing="$missing TF_BACKEND_RESOURCE_GROUP"
+          [ -n "$BACKEND_SA" ] || missing="$missing TF_BACKEND_STORAGE_ACCOUNT"
+          [ -n "$BACKEND_CT" ] || missing="$missing TF_BACKEND_CONTAINER"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing state-backend Environment Variable(s):$missing. Provision the backend first (see the skill's references/backend-bootstrap.md) and set these as GitHub Environment Variables."
+            exit 1
+          fi
+          # Partial backend: the azurerm backend block is empty here and filled from the .hcl at init.
+          # use_azuread_auth = true so storage accounts with shared-key access disabled still work.
+          # Only add backend.tf when the repo does not already declare an azurerm backend; writing a
+          # second `backend "azurerm"` block would be a duplicate configuration that Terraform rejects.
+          if grep -rqsE 'backend[[:space:]]+"azurerm"' --include='*.tf' .; then
+            echo "Existing azurerm backend block found in the Terraform sources; not writing backend.tf (its settings are supplied from the .hcl at init)."
+          else
+            cat > backend.tf <<'EOF'
+          terraform {
+            backend "azurerm" {
+              use_oidc         = true
+              use_azuread_auth = true
+            }
+          }
+          EOF
+          fi
+          # One state key per environment keeps stages isolated in the same container.
+          cat > "backend.$ENVIRONMENT.hcl" <<EOF
+          resource_group_name  = "$BACKEND_RG"
+          storage_account_name = "$BACKEND_SA"
+          container_name       = "$BACKEND_CT"
+          key                  = "$ENVIRONMENT.tfstate"
+          EOF
+
+      - name: Terraform init
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: terraform init -input=false -backend-config="backend.$ENVIRONMENT.hcl"
+
+      - name: Terraform plan
+        id: plan
+        if: inputs.command == 'plan'
+        env:
+          VAR_FILE: ${{ steps.vars.outputs.file }}
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -input=false -no-color -var-file="$VAR_FILE" -out=tfplan
+          ec=$?
+          set -e
+          case "$ec" in
+            0) echo "has_changes=false" >> "$GITHUB_OUTPUT" ;;
+            2) echo "has_changes=true"  >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::terraform plan exited with status $ec"; exit "$ec" ;;
+          esac
+          {
+            echo "### Terraform plan — \`${{ inputs.environment }}\`"
+            echo ''
+            echo '```hcl'
+            terraform show -no-color tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload tfplan
+        if: inputs.command == 'plan'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Terraform apply
+        if: inputs.command == 'apply'
+        env:
+          VAR_FILE: ${{ steps.vars.outputs.file }}
+        run: terraform apply -input=false -auto-approve -var-file="$VAR_FILE"

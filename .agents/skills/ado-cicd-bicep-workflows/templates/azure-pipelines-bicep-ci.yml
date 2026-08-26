@@ -1,0 +1,99 @@
+# Azure DevOps — Bicep CI (static validation)
+#
+# There is no long-lived resource group, so a PR cannot run `what-if`. This pipeline performs
+# fast, credential-free static checks (lint / build / format /
+# build-params). The full create -> provision -> post-deploy -> test -> cleanup cycle runs in the
+# deploy pipeline (push to the default branch, schedule, or manual), never on a PR.
+#
+# Placeholders rendered by the skill:
+#   __DEFAULT_BRANCH__  e.g. main
+#   __INFRA_DIR__       e.g. infra
+
+trigger: none # CI runs on PRs only (see pr:)
+
+pr:
+  branches:
+    include:
+      - __DEFAULT_BRANCH__
+  paths:
+    include:
+      - __INFRA_DIR__/**
+      - .azuredevops/pipelines/azure-pipelines-bicep-ci.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  INFRA_DIR: __INFRA_DIR__
+
+steps:
+  - checkout: self
+
+  - task: Bash@3
+    displayName: Install Bicep CLI
+    inputs:
+      targetType: inline
+      script: |
+        set -euo pipefail
+        az bicep install
+        az bicep version
+
+  - task: Bash@3
+    displayName: Lint and build
+    inputs:
+      targetType: inline
+      script: |
+        set -euo pipefail
+        shopt -s nullglob globstar
+        found=0
+        for t in "$INFRA_DIR"/**/*.bicep; do
+          found=1
+          echo "----- lint $t";  az bicep lint  --file "$t"
+          echo "----- build $t"; az bicep build --file "$t" --stdout >/dev/null
+        done
+        for p in "$INFRA_DIR"/**/*.bicepparam; do
+          echo "----- build-params $p"; az bicep build-params --file "$p" --stdout >/dev/null
+        done
+        if [ "$found" -eq 0 ]; then
+          echo "##vso[task.logissue type=error]No .bicep files found under $INFRA_DIR/"
+          exit 1
+        fi
+
+  - task: Bash@3
+    displayName: Validate JSON parameters
+    inputs:
+      targetType: inline
+      script: |
+        set -euo pipefail
+        shopt -s nullglob globstar
+        for p in "$INFRA_DIR"/**/main.parameters.json "$INFRA_DIR"/*.parameters.json; do
+          echo "----- json check $p"
+          # azd/Bicep parameter files use ${VAR} tokens, so validate structure with a tolerant parser.
+          python3 - "$p" <<'PY'
+        import json, re, sys
+        path = sys.argv[1]
+        raw = open(path, encoding="utf-8").read()
+        # Blank out ${...} tokens so the file parses as plain JSON for a structural check.
+        cleaned = re.sub(r"\$\{[^}]*\}", "", raw)
+        json.loads(cleaned)
+        print("ok", path)
+        PY
+        done
+
+  - task: Bash@3
+    displayName: Format check
+    inputs:
+      targetType: inline
+      script: |
+        set -euo pipefail
+        shopt -s nullglob globstar
+        rc=0
+        for t in "$INFRA_DIR"/**/*.bicep "$INFRA_DIR"/**/*.bicepparam; do
+          az bicep format --file "$t" --stdout > /tmp/formatted 2>/dev/null || continue
+          if ! diff -q "$t" /tmp/formatted >/dev/null; then
+            echo "##vso[task.logissue type=error;sourcepath=$t]Not formatted. Run: az bicep format --file $t"
+            diff -u "$t" /tmp/formatted || true
+            rc=1
+          fi
+        done
+        exit $rc

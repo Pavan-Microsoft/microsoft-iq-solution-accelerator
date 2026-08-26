@@ -1,0 +1,30 @@
+name: terraform-deploy
+
+on:
+  push:
+    branches: [__DEFAULT_BRANCH__]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-deploy
+  cancel-in-progress: false
+
+jobs:
+  plan-<env>:
+    uses: ./.github/workflows/_infra_tf.yml
+    with:
+      environment: <env>
+      gh_environment: <env>-preview
+      command: plan
+
+  apply-<env>:
+    needs: plan-<env>
+    uses: ./.github/workflows/_infra_tf.yml
+    with:
+      environment: <env>
+      gh_environment: <env>
+      command: apply

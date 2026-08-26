@@ -1,0 +1,24 @@
+# Snippet: post-deploy job to append to the infra skill's bicep-deploy.yml.
+#
+# The cicd-post-deploy skill adds one post-deploy-<env> job per stage that
+# should run post-deployment steps, chained after that stage's gated
+# apply-<env> job. This keeps the two skills decoupled: cicd-bicep-workflows
+# owns the infra jobs; this skill appends the post-deploy jobs.
+#
+# Requirements:
+#   - _infra.yml exposes `deployment_name` as a workflow_call output (it does).
+#   - _post-deploy.yml is present in .github/workflows/.
+#
+# Substitute <env> with the stage name. Append after the matching apply-<env> job.
+#
+# For a Terraform infra pipeline, drop `deployment_name` and instead pass
+# `infra_flavor: terraform` (and `working_directory:` if the Terraform root is
+# not `infra_tf`); the engine reads outputs from Terraform state.
+
+  post-deploy-<env>:
+    needs: apply-<env>
+    uses: ./.github/workflows/_post-deploy.yml
+    with:
+      environment: <env>
+      gh_environment: <env>
+      deployment_name: ${{ needs.apply-<env>.outputs.deployment_name }}
