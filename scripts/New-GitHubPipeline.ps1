@@ -51,6 +51,15 @@ if ([string]::IsNullOrWhiteSpace($PipelineName)) {
     $PipelineName = ($Repo -replace '/', '-') + "-CI"
 }
 
+$normalizedPipelineName = ($PipelineName -replace '[\\/:*?"<>|]', '-').Trim()
+if ([string]::IsNullOrWhiteSpace($normalizedPipelineName)) {
+    throw "PipelineName must contain at least one valid character."
+}
+if ($normalizedPipelineName -ne $PipelineName) {
+    Write-Info "Normalized pipeline name '$PipelineName' to '$normalizedPipelineName'."
+    $PipelineName = $normalizedPipelineName
+}
+
 # --- Resolve the service connection name to an id (GUID) if a name was supplied ---
 $connectionId = $ServiceConnection
 if ($ServiceConnection -notmatch '^[0-9a-fA-F-]{36}$') {
