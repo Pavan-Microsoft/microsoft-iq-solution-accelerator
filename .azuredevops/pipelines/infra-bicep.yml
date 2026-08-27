@@ -1,0 +1,95 @@
+# Reusable Bicep provisioning steps. Cleanup is owned by the deploy pipeline.
+
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: azureEnvName
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: location
+    type: string
+  - name: subscriptionId
+    type: string
+  - name: scope
+    type: string
+    default: resourceGroup
+  - name: templateFile
+    type: string
+    default: infra/main.bicep
+  - name: parametersFile
+    type: string
+    default: ""
+
+steps:
+  - task: AzureCLI@2
+    displayName: Provision infrastructure (az deployment)
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+
+        SUB='${{ parameters.subscriptionId }}'
+        RG='${{ parameters.resourceGroup }}'
+        LOC='${{ parameters.location }}'
+        SCOPE='${{ parameters.scope }}'
+        TEMPLATE='${{ parameters.templateFile }}'
+        PARAMS_FILE='${{ parameters.parametersFile }}'
+        export AZURE_ENV_NAME='${{ parameters.azureEnvName }}'
+        export AZURE_SUBSCRIPTION_ID="$SUB"
+        export AZURE_LOCATION="$LOC"
+        export AZURE_RESOURCE_GROUP="$RG"
+
+        az account set --subscription "$SUB"
+
+        PARAM_ARG=""
+        if [ -n "$PARAMS_FILE" ] && [ -f "$PARAMS_FILE" ]; then
+          case "$PARAMS_FILE" in
+            *.json)
+              CONTENT="$(cat "$PARAMS_FILE")"
+              TOKENS="$(grep -oE '\$\{[A-Za-z0-9_]+(=[^}]*)?\}' "$PARAMS_FILE" | sort -u || true)"
+              while IFS= read -r TOK; do
+                [ -n "$TOK" ] || continue
+                INNER="${TOK#\$\{}"; INNER="${INNER%\}}"
+                if [ "${INNER%%=*}" != "$INNER" ]; then
+                  NAME="${INNER%%=*}"; DEF="${INNER#*=}"
+                else
+                  NAME="$INNER"; DEF=""
+                fi
+                set +u; VAL="${!NAME}"; set -u
+                [ -n "$VAL" ] || VAL="$DEF"
+                CONTENT="${CONTENT//"$TOK"/$VAL}"
+              done <<< "$TOKENS"
+              printf '%s' "$CONTENT" > main.parameters.resolved.json
+              python3 -c "import json; json.load(open('main.parameters.resolved.json'))" 2>/dev/null \
+                || { echo "Resolved parameters are not valid JSON:"; cat main.parameters.resolved.json; exit 1; }
+              echo "Resolved parameters written to main.parameters.resolved.json"
+              PARAM_ARG="--parameters @main.parameters.resolved.json"
+              ;;
+            *)
+              PARAM_ARG="--parameters $PARAMS_FILE"
+              ;;
+          esac
+        fi
+
+        if [ "$SCOPE" = "subscription" ]; then
+          echo "Deploying at subscription scope..."
+          az deployment sub create \
+            --name "$AZURE_ENV_NAME" \
+            --location "$LOC" \
+            --template-file "$TEMPLATE" \
+            $PARAM_ARG
+        else
+          echo "Creating resource group: $RG"
+          az group create --name "$RG" --location "$LOC" --output none
+          echo "Deploying at resource-group scope into: $RG"
+          az deployment group create \
+            --name "$AZURE_ENV_NAME" \
+            --resource-group "$RG" \
+            --template-file "$TEMPLATE" \
+            $PARAM_ARG
+        fi
+
+        echo "Provisioned. Resource group: $RG"

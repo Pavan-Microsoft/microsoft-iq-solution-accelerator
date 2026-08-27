@@ -1,0 +1,139 @@
+# Reusable post-deploy stage for solution bootstrap and manual-step reporting.
+
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: azureEnvName
+    type: string
+  - name: subscriptionId
+    type: string
+  - name: dependsOn
+    type: string
+    default: Provision
+
+stages:
+  - stage: PostDeployTest
+    displayName: Post-deploy and tests
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: succeeded()
+    jobs:
+      - job: post_deploy
+        displayName: Run post-deploy scripts
+        steps:
+          - checkout: self
+
+          - task: DownloadPipelineArtifact@2
+            displayName: Download infra outputs (if published)
+            continueOnError: true
+            inputs:
+              artifact: infra-outputs
+              path: $(Pipeline.Workspace)/infra-outputs
+
+          - task: AzureCLI@2
+            displayName: Read config from resource group and hydrate azd env
+            inputs:
+              azureSubscription: ${{ parameters.serviceConnection }}
+              scriptType: bash
+              addSpnToEnvironment: true
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                RG='${{ parameters.resourceGroup }}'
+                AZD_ENV='${{ parameters.azureEnvName }}'
+                export AZURE_SUBSCRIPTION_ID='${{ parameters.subscriptionId }}'
+
+                ART="${PIPELINE_WORKSPACE:-$(pwd)}/infra-outputs/infra-outputs.json"
+                if [ -f "$ART" ] && [ "$(tr -d '[:space:]' < "$ART")" != "{}" ] && [ -s "$ART" ]; then
+                  echo "Using published infra outputs artifact: $ART"
+                  cp "$ART" infra-outputs.json
+                else
+                  DEP="$(az deployment group list --resource-group "$RG" \
+                    --query "sort_by([?properties.provisioningState=='Succeeded'], &properties.timestamp)[-1].name" \
+                    -o tsv 2>/dev/null || true)"
+                  if [ -z "$DEP" ] || [ "$DEP" = "None" ]; then
+                    echo "No succeeded ARM deployment found in '$RG'; using an empty output set."
+                    echo '{}' > infra-outputs.json
+                  else
+                    echo "Reading outputs from deployment: $DEP"
+                    az deployment group show --resource-group "$RG" --name "$DEP" \
+                      --query properties.outputs -o json > infra-outputs.json
+                  fi
+                fi
+
+                curl -fsSL https://aka.ms/install-azd.sh | bash
+                azd version
+                azd auth login \
+                  --client-id "$servicePrincipalId" \
+                  ${servicePrincipalKey:+--client-secret "$servicePrincipalKey"} \
+                  ${servicePrincipalKey:+--tenant-id "$tenantId"} \
+                  ${servicePrincipalKey:--federated-credential-provider "azure-pipelines"} 1>/dev/null 2>&1 || true
+
+                azd env new "$AZD_ENV" --subscription "$AZURE_SUBSCRIPTION_ID" --no-prompt \
+                  || azd env select "$AZD_ENV"
+                azd env set AZURE_RESOURCE_GROUP "$RG"
+
+                jq -r '
+                  to_entries[]
+                  | select((.value.value | type) as $t | $t=="string" or $t=="number" or $t=="boolean")
+                  | "\(.key | ascii_upcase)\t\(.value.value | tostring)"
+                ' infra-outputs.json > kv.tsv || : > kv.tsv
+
+                : > .env
+                while IFS="$(printf '\t')" read -r k v; do
+                  [ -n "$k" ] || continue
+                  azd env set "$k" "$v" || true
+                  printf '%s=%s\n' "$k" "$v" >> .env
+                  echo "##vso[task.setvariable variable=$k]$v"
+                done < kv.tsv
+                echo "Hydrated $(wc -l < kv.tsv) output(s) into azd env '$AZD_ENV' and .env."
+
+          - task: AzureCLI@2
+            displayName: Run solution bootstrap
+            inputs:
+              azureSubscription: ${{ parameters.serviceConnection }}
+              scriptType: bash
+              addSpnToEnvironment: true
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                export AZURE_ENV_NAME='${{ parameters.azureEnvName }}'
+                export AZURE_RESOURCE_GROUP='${{ parameters.resourceGroup }}'
+                export AZURE_SUBSCRIPTION_ID='${{ parameters.subscriptionId }}'
+                run_step() {
+                  runner="$1"; path="$2"; shift 2
+                  if [ ! -f "$path" ]; then
+                    echo "##vso[task.logissue type=error]post-deploy script '$path' not found."
+                    exit 1
+                  fi
+                  echo "----- $runner $path $*"
+                  case "$runner" in
+                    bash) bash "$path" "$@" ;;
+                    pwsh) pwsh -File "$path" "$@" ;;
+                    python) python "$path" "$@" ;;
+                    *) echo "##vso[task.logissue type=error]unknown runner '$runner' for '$path'"; exit 1 ;;
+                  esac
+                }
+                run_step pwsh infra/scripts/utils/Run-PythonScript.ps1 \
+                  -ScriptPath infra/scripts/install_microsoft_iq_solution.py \
+                  -SkipPythonVirtualEnvironment
+
+          - task: Bash@3
+            displayName: Manual post-steps (reminder)
+            condition: always()
+            inputs:
+              targetType: inline
+              script: |
+                set -euo pipefail
+                {
+                  echo "### Post-deploy manual steps not run by CI"
+                  echo ""
+                  cat <<'REMINDER'
+                - Import the Work IQ Power Platform solution from src/copilot/sln.
+                - Authorize the required Power Platform connections.
+                - Configure the email trigger and optional subject filter.
+                - Publish the Copilot Studio agent and enable the Microsoft Teams channel.
+                REMINDER
+                } | tee "$(Build.ArtifactStagingDirectory)/manual-post-steps.md"
+                echo "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)/manual-post-steps.md"
