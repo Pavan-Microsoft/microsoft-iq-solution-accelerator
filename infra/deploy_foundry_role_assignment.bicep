@@ -14,13 +14,13 @@ param aiServicesName string
 param aiProjectName string = ''
 
 @description('The Azure region for the AI Services account.')
-param aiLocation string=''
+param aiLocation string = ''
 
 @description('The kind of AI Services account (e.g., AIServices).')
-param aiKind string=''
+param aiKind string = ''
 
 @description('The SKU name for the AI Services account.')
-param aiSkuName string=''
+param aiSkuName string = ''
 
 @description('Whether to enable system-assigned managed identity on the AI Services account.')
 param enableSystemAssignedIdentity bool = false
@@ -59,34 +59,35 @@ resource aiServicesWithIdentity 'Microsoft.CognitiveServices/accounts@2025-04-01
   }
   properties: {
     allowProjectManagement: true
-    customSubDomainName: customSubDomainName 
+    customSubDomainName: customSubDomainName
     networkAcls: {
       defaultAction: defaultNetworkAction
       virtualNetworkRules: vnetRules
       ipRules: ipRules
     }
     publicNetworkAccess: publicNetworkAccess
-
   }
 }
 
 @batchSize(1)
-resource aiServicesDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = [for aiModeldeployment in aiModelDeployments: if (!empty(aiModelDeployments)) {
-  parent: aiServicesWithIdentity
-  name: aiModeldeployment.name
-  properties: {
-    model: {
-      format: 'OpenAI'
-      name: aiModeldeployment.model
-      version: aiModeldeployment.?version
+resource aiServicesDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = [
+  for aiModeldeployment in aiModelDeployments: if (!empty(aiModelDeployments)) {
+    parent: aiServicesWithIdentity
+    name: aiModeldeployment.name
+    properties: {
+      model: {
+        format: 'OpenAI'
+        name: aiModeldeployment.model
+        version: aiModeldeployment.?version
+      }
+      raiPolicyName: aiModeldeployment.raiPolicyName
     }
-    raiPolicyName: aiModeldeployment.raiPolicyName
+    sku: {
+      name: aiModeldeployment.sku.name
+      capacity: aiModeldeployment.sku.capacity
+    }
   }
-  sku:{
-    name: aiModeldeployment.sku.name
-    capacity: aiModeldeployment.sku.capacity
-  }
-}]
+]
 
 resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' existing = if (!empty(aiProjectName) && !enableSystemAssignedIdentity) {
   name: aiProjectName
@@ -133,7 +134,5 @@ output aiServicesPrincipalId string = enableSystemAssignedIdentity
 
 @description('The principal ID of the AI Project system-assigned managed identity.')
 output aiProjectPrincipalId string = !empty(aiProjectName)
-  ? (enableSystemAssignedIdentity
-      ? aiProjectWithIdentity.identity.principalId
-      : aiProject.identity.principalId)
+  ? (enableSystemAssignedIdentity ? aiProjectWithIdentity.identity.principalId : aiProject.identity.principalId)
   : ''

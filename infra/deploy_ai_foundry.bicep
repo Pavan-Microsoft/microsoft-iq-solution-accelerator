@@ -56,15 +56,13 @@ var abbrs = loadJsonContent('./abbreviations.json')
 
 var solutionSuffix = toLower(trim(replace(
   replace(
-    replace(
-      replace(
-        replace(
-          replace('${solutionName}${solutionUniqueText}', '-', ''),
-        '_', ''),
-      '.', ''),
-    '/', ''),
-  ' ', ''),
-'*', '')))
+    replace(replace(replace(replace('${solutionName}${solutionUniqueText}', '-', ''), '_', ''), '.', ''), '/', ''),
+    ' ',
+    ''
+  ),
+  '*',
+  ''
+)))
 
 var aiServicesName = '${abbrs.ai.aiServices}${solutionSuffix}'
 var workspaceName = '${abbrs.managementGovernance.logAnalyticsWorkspace}${solutionSuffix}'
@@ -75,47 +73,66 @@ var aiSearchName = '${abbrs.ai.aiSearch}${solutionSuffix}'
 var storageName = take(toLower(replace('${abbrs.storage.storageAccount}${solutionSuffix}', '-', '')), 24)
 var aiSearchConnectionName = '${abbrs.ai.aiSearch}con-${solutionSuffix}'
 
-var aiModelDeployments = concat([
-  {
-    name: gptModelName
-    model: gptModelName
-    sku: {
-      name: deploymentType
-      capacity: gptDeploymentCapacity
+var aiModelDeployments = concat(
+  [
+    {
+      name: gptModelName
+      model: gptModelName
+      sku: {
+        name: deploymentType
+        capacity: gptDeploymentCapacity
+      }
+      version: gptModelVersion
+      raiPolicyName: 'Microsoft.Default'
     }
-    version: gptModelVersion
-    raiPolicyName: 'Microsoft.Default'
-  }
-], [
-  {
-    name: embeddingModel
-    model: embeddingModel
-    sku: {
-      name: 'GlobalStandard'
-      capacity: embeddingDeploymentCapacity
+  ],
+  [
+    {
+      name: embeddingModel
+      model: embeddingModel
+      sku: {
+        name: 'GlobalStandard'
+        capacity: embeddingDeploymentCapacity
+      }
+      raiPolicyName: 'Microsoft.Default'
     }
-    raiPolicyName: 'Microsoft.Default'
-  }
-])
+  ]
+)
 
 var useExisting = !empty(existingLogAnalyticsWorkspaceId)
 var existingLawSubscription = useExisting ? split(existingLogAnalyticsWorkspaceId, '/')[2] : ''
 var existingLawResourceGroup = useExisting ? split(existingLogAnalyticsWorkspaceId, '/')[4] : ''
 var existingLawName = useExisting ? split(existingLogAnalyticsWorkspaceId, '/')[8] : ''
 
-var existingOpenAIEndpoint = !empty(azureExistingAIProjectResourceId) ? format('https://{0}.openai.azure.com/', split(azureExistingAIProjectResourceId, '/')[8]) : ''
-var existingProjEndpoint = !empty(azureExistingAIProjectResourceId) ? format('https://{0}.services.ai.azure.com/api/projects/{1}', split(azureExistingAIProjectResourceId, '/')[8], split(azureExistingAIProjectResourceId, '/')[10]) : ''
-var existingAIServicesName = !empty(azureExistingAIProjectResourceId) ? split(azureExistingAIProjectResourceId, '/')[8] : ''
-var existingAIProjectName = !empty(azureExistingAIProjectResourceId) ? split(azureExistingAIProjectResourceId, '/')[10] : ''
-var existingAIServiceSubscription = !empty(azureExistingAIProjectResourceId) ? split(azureExistingAIProjectResourceId, '/')[2] : subscription().subscriptionId
-var existingAIServiceResourceGroup = !empty(azureExistingAIProjectResourceId) ? split(azureExistingAIProjectResourceId, '/')[4] : resourceGroup().name
+var existingOpenAIEndpoint = !empty(azureExistingAIProjectResourceId)
+  ? format('https://{0}.openai.azure.com/', split(azureExistingAIProjectResourceId, '/')[8])
+  : ''
+var existingProjEndpoint = !empty(azureExistingAIProjectResourceId)
+  ? format(
+      'https://{0}.services.ai.azure.com/api/projects/{1}',
+      split(azureExistingAIProjectResourceId, '/')[8],
+      split(azureExistingAIProjectResourceId, '/')[10]
+    )
+  : ''
+var existingAIServicesName = !empty(azureExistingAIProjectResourceId)
+  ? split(azureExistingAIProjectResourceId, '/')[8]
+  : ''
+var existingAIProjectName = !empty(azureExistingAIProjectResourceId)
+  ? split(azureExistingAIProjectResourceId, '/')[10]
+  : ''
+var existingAIServiceSubscription = !empty(azureExistingAIProjectResourceId)
+  ? split(azureExistingAIProjectResourceId, '/')[2]
+  : subscription().subscriptionId
+var existingAIServiceResourceGroup = !empty(azureExistingAIProjectResourceId)
+  ? split(azureExistingAIProjectResourceId, '/')[4]
+  : resourceGroup().name
 
 resource existingLogAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = if (useExisting) {
   name: existingLawName
-  scope: resourceGroup(existingLawSubscription ,existingLawResourceGroup)
+  scope: resourceGroup(existingLawSubscription, existingLawResourceGroup)
 }
 
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (!useExisting){
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (!useExisting) {
   name: workspaceName
   location: location
   tags: {}
@@ -149,7 +166,7 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   name: 'default'
 }
 
-resource aiServices 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' =  if (empty(azureExistingAIProjectResourceId)) {
+resource aiServices 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = if (empty(azureExistingAIProjectResourceId)) {
   name: aiServicesName
   location: location
   sku: {
@@ -182,22 +199,24 @@ module existing_aiServicesModule 'existing_foundry_project.bicep' = if (!empty(a
 }
 
 @batchSize(1)
-resource aiServicesDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = [for aiModeldeployment in aiModelDeployments: if (empty(azureExistingAIProjectResourceId)) {
-  parent: aiServices //aiServices_m
-  name: aiModeldeployment.name
-  properties: {
-    model: {
-      format: 'OpenAI'
-      name: aiModeldeployment.model
-      version: aiModeldeployment.?version
+resource aiServicesDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = [
+  for aiModeldeployment in aiModelDeployments: if (empty(azureExistingAIProjectResourceId)) {
+    parent: aiServices //aiServices_m
+    name: aiModeldeployment.name
+    properties: {
+      model: {
+        format: 'OpenAI'
+        name: aiModeldeployment.model
+        version: aiModeldeployment.?version
+      }
+      raiPolicyName: aiModeldeployment.raiPolicyName
     }
-    raiPolicyName: aiModeldeployment.raiPolicyName
+    sku: {
+      name: aiModeldeployment.sku.name
+      capacity: aiModeldeployment.sku.capacity
+    }
   }
-  sku:{
-    name: aiModeldeployment.sku.name
-    capacity: aiModeldeployment.sku.capacity
-  }
-}]
+]
 
 resource aiSearch 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   name: aiSearchName
@@ -232,7 +251,7 @@ module searchServiceEnableIdentity 'deploy_enable_srch_managed_identity.bicep' =
   ]
 }
 
-resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' =  if (empty(azureExistingAIProjectResourceId)) {
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = if (empty(azureExistingAIProjectResourceId)) {
   parent: aiServices
   name: aiProjectName
   location: solutionLocation
@@ -282,7 +301,7 @@ resource searchIndexDataContributor 'Microsoft.Authorization/roleDefinitions@202
   name: '8ebe5a00-799e-43f5-93ac-243d3dce84a7'
 }
 
-resource assignFoundryRoleToMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (empty(azureExistingAIProjectResourceId))  {
+resource assignFoundryRoleToMI 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (empty(azureExistingAIProjectResourceId)) {
   name: guid(resourceGroup().id, aiServices.id, azureAIUser.id, managedIdentityObjectId)
   scope: aiServices
   properties: {
@@ -317,7 +336,7 @@ module assignFoundryRoleToMIExisting 'deploy_foundry_role_assignment.bicep' = if
   }
 }
 
-resource assignOpenAIRoleToAISearch 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (empty(azureExistingAIProjectResourceId))  {
+resource assignOpenAIRoleToAISearch 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (empty(azureExistingAIProjectResourceId)) {
   name: guid(resourceGroup().id, aiServices.id, cognitiveServicesOpenAIUser.id, aiSearch.id)
   scope: aiServices
   properties: {
@@ -578,7 +597,9 @@ resource userStorageBlobContributor 'Microsoft.Authorization/roleAssignments@202
 }
 
 @description('The endpoint URL for the Azure OpenAI service.')
-output aiServicesTarget string = !empty(existingOpenAIEndpoint) ? existingOpenAIEndpoint : aiServices.properties.endpoints['OpenAI Language Model Instance API']
+output aiServicesTarget string = !empty(existingOpenAIEndpoint)
+  ? existingOpenAIEndpoint
+  : aiServices.properties.endpoints['OpenAI Language Model Instance API']
 
 @description('The name of the AI Services account.')
 output aiServicesName string = !empty(existingAIServicesName) ? existingAIServicesName : aiServicesName
@@ -614,10 +635,14 @@ output logAnalyticsWorkspaceResourceGroup string = useExisting ? existingLawReso
 output logAnalyticsWorkspaceSubscription string = useExisting ? existingLawSubscription : subscription().subscriptionId
 
 @description('The endpoint URL for the AI Foundry project.')
-output projectEndpoint string = !empty(existingProjEndpoint) ? existingProjEndpoint : aiProject.properties.endpoints['AI Foundry API']
+output projectEndpoint string = !empty(existingProjEndpoint)
+  ? existingProjEndpoint
+  : aiProject.properties.endpoints['AI Foundry API']
 
 @description('The resource ID of the AI Foundry account.')
-output aiFoundryResourceId string = !empty(azureExistingAIProjectResourceId) ? azureExistingAIProjectResourceId : aiServices.id
+output aiFoundryResourceId string = !empty(azureExistingAIProjectResourceId)
+  ? azureExistingAIProjectResourceId
+  : aiServices.id
 
 @description('The blob endpoint URL for the storage account.')
 output storageBlobEndpoint string = storageAccount.properties.primaryEndpoints.blob

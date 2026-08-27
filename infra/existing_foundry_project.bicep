@@ -13,7 +13,6 @@ resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-pre
   parent: aiServices
 }
 
-
 // Outputs: AI Services Account
 
 @description('The Azure region of the AI Services account.')

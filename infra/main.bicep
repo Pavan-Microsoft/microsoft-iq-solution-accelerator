@@ -26,7 +26,9 @@ param location string = resourceGroup().location
 param enableTelemetry bool = true
 
 @description('Optional. Created by user name.')
-param createdBy string = contains(deployer(), 'userPrincipalName') ? split(deployer().userPrincipalName, '@')[0] : deployer().objectId
+param createdBy string = contains(deployer(), 'userPrincipalName')
+  ? split(deployer().userPrincipalName, '@')[0]
+  : deployer().objectId
 
 // ========== Fabric Parameters ========== //
 
@@ -129,15 +131,13 @@ param deployingUserPrincipalType string = 'User'
 // ========== Variables ========== //
 var solutionSuffix = toLower(trim(replace(
   replace(
-    replace(
-      replace(
-        replace(
-          replace('${solutionName}${solutionUniqueText}', '-', ''),
-        '_', ''),
-      '.', ''),
-    '/', ''),
-  ' ', ''),
-'*', '')))
+    replace(replace(replace(replace('${solutionName}${solutionUniqueText}', '-', ''), '_', ''), '.', ''), '/', ''),
+    ' ',
+    ''
+  ),
+  '*',
+  ''
+)))
 
 var useExistingFabricCapacity = !empty(existingFabricCapacityName)
 var deployerInfo = deployer()
@@ -147,15 +147,12 @@ var deployingUserPrincipalId = deployerInfo.objectId
 resource resourceGroupTags 'Microsoft.Resources/tags@2021-04-01' = {
   name: 'default'
   properties: {
-    tags: union(
-      resourceGroup().tags,
-      {
-        TemplateName: 'Microsoft IQ Solution Accelerator'
-        CreatedBy: createdBy
-        DeploymentName: deployment().name
-        Type: 'Non-WAF'
-      }
-    )
+    tags: union(resourceGroup().tags, {
+      TemplateName: 'Microsoft IQ Solution Accelerator'
+      CreatedBy: createdBy
+      DeploymentName: deployment().name
+      Type: 'Non-WAF'
+    })
   }
 }
 
