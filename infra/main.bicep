@@ -286,7 +286,7 @@ output AZURE_AI_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
 @description('Azure AI Foundry resource ID for role assignments')
 output AI_FOUNDRY_RESOURCE_ID string = aifoundry.outputs.aiFoundryResourceId
 
-@description('Azure AI Foundry project name')
+@description('Azure AI Foundry project name.')
 output AZURE_AI_PROJECT_NAME string = aifoundry.outputs.aiProjectName
 
 @description('Azure AI Services resource name')
