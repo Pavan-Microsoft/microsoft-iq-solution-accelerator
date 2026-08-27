@@ -52,3 +52,4 @@ output projectKind string = aiProject.kind
 
 @description('The provisioning state of the AI Project.')
 output projectProvisioningState string = aiProject.properties.provisioningState
+

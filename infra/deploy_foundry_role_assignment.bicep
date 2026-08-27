@@ -136,3 +136,4 @@ output aiServicesPrincipalId string = enableSystemAssignedIdentity
 output aiProjectPrincipalId string = !empty(aiProjectName)
   ? (enableSystemAssignedIdentity ? aiProjectWithIdentity.identity.principalId : aiProject.identity.principalId)
   : ''
+

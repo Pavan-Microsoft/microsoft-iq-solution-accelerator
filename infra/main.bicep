@@ -288,3 +288,4 @@ output AZURE_AI_PROJECT_NAME string = aifoundry.outputs.aiProjectName
 
 @description('Azure AI Services resource name')
 output AI_SERVICE_NAME string = aifoundry.outputs.aiServicesName
+

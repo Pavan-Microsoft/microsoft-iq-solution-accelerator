@@ -28,3 +28,4 @@ output managedIdentityOutput object = {
   clientId: managedIdentity.properties.clientId
   name: miName
 }
+

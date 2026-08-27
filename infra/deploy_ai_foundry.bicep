@@ -649,3 +649,4 @@ output storageBlobEndpoint string = storageAccount.properties.primaryEndpoints.b
 
 @description('The name of the storage account.')
 output storageAccountName string = storageAccount.name
+
