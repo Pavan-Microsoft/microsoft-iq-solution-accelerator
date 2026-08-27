@@ -66,6 +66,9 @@ if ($ServiceConnection -notmatch '^[0-9a-fA-F-]{36}$') {
     Write-Info "Resolving service connection '$ServiceConnection' to an id..."
     $connectionId = az devops service-endpoint list --org $OrgUrl --project $Project `
         --query "[?name=='$ServiceConnection'].id | [0]" -o tsv
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to query Azure DevOps service connections. Run 'az login' for AAD authentication or 'az devops login' for PAT authentication, then retry."
+    }
     if ([string]::IsNullOrWhiteSpace($connectionId)) {
         throw "Could not find a service connection named '$ServiceConnection' in '$Project'."
     }
@@ -75,6 +78,9 @@ Write-Info "Using service connection id: $connectionId"
 # --- Idempotency: skip if a pipeline with this folder + name already exists ---
 $folderKey = "$(([string]$Folder).TrimEnd('\'))\$PipelineName"
 $existing = az pipelines list --org $OrgUrl --project $Project -o json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to query Azure DevOps pipelines. Verify Azure DevOps authentication and project access, then retry."
+}
 foreach ($p in $existing) {
     if ("$(($p.path).TrimEnd('\'))\$($p.name)" -eq $folderKey) {
         Write-Info "SKIP: pipeline '$folderKey' already exists (id $($p.id))."
